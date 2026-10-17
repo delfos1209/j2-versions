@@ -1,7 +1,9 @@
 {
-    "version": "7.7",
-    "releaseDate": "2026-10-04",
-    "notes": "🎉 J2 v7.7.0\n\n• Bloqueo total de la app sin licencia\n• Planes clickeables con activación directa\n• DevTools protegido con contraseña admin\n• Firmas migradas a ECDSA P-256\n• POS por categorías con emoji\n• Venta por precio y por unidad\n• Emoji picker con ~200 emojis\n• Recibos mejorados\n• Cierre de caja completo",
-    "downloadUrl": "https://github.com/delfos1209/j2-versions/releases/download/v7.7.0/J2-PuntoDeVenta.Setup.7.7.0.exe",
-    "critical": false
+  "version": "8.0",
+  "releaseDate": "2026-10-17",
+  "notes": "Optimización de rendimiento, filtro de estado en inventario, productos archivados con eliminación segura por contraseña de admin, pantallas de carga y mejoras de fluidez.",
+  "downloads": {
+    "desktop": "https://github.com/delfos1209/j2-versions/releases/download/v8.0.0/J2-Setup-8.0.0.exe",
+    "android": ""
+  }
 }
