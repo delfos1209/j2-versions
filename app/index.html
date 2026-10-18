@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="J2">
+    <title>J2 · Punto de Venta</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>var exports = {"__esModule": true};</script>
+    <script src="noble-ed25519.js"></script>
+    <script src="crypto-utils.js"></script>
+    <script src="licencia.js"></script>
+</head>
+
+<body>
+
+<!-- OVERLAY DE CARGA GLOBAL -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p class="loading-text">Cargando J2...</p>
+</div>
+
+<header class="topbar">
+    <div class="topbar-brand">
+        <img src="logo.png" alt="J2" class="topbar-logo" id="topbarLogo">
+        <div>
+            <h1 id="topbarStoreName">J2</h1>
+            <span id="topbarStoreSubtitle">Punto de venta e inventario</span>
+        </div>
+    </div>
+
+    <div class="topbar-actions">
+        <span id="planBadge" class="plan-badge-top"></span>
+        <button class="icon-btn" id="helpBtn" title="Ayuda">❓</button>
+        <button class="icon-btn" id="settingsBtn" title="Configuración">⚙️</button>
+        <button class="icon-btn" id="installBtn" title="Instalar app" style="display:none;">📲</button>
+        <button class="icon-btn" id="backupBtn" title="Respaldar datos">💾</button>
+        <button class="icon-btn" id="restoreBtn" title="Restaurar datos">📂</button>
+        <input type="file" id="restoreInput" accept=".json" style="display:none">
+        <button class="icon-btn" id="plansBtn" title="Ver planes">💎</button>
+        <div class="date" id="currentDate"></div>
+    </div>
+</header>
+
+<nav class="menu">
+    <button class="menu-btn active" data-section="ventas">🧮 <span>Ventas</span></button>
+    <button class="menu-btn" data-section="inventario">📦 <span>Inventario</span></button>
+    <button class="menu-btn" data-section="clientes">👥 <span>Clientes</span></button>
+    <button class="menu-btn" data-section="proveedores">🚚 <span>Proveedores</span></button>
+    <button class="menu-btn" data-section="reportes">📊 <span>Reportes</span></button>
+    <button class="menu-btn" data-section="caja">💰 <span>Caja</span></button>
+</nav>
+
+<main>
+
+<div id="updateBanner" class="update-banner" style="display:none;"></div>
+<div id="expiryBanner" class="expiry-banner" style="display:none;"></div>
+<div id="demoBanner" class="demo-banner" style="display:none;"></div>
+<div id="stockAlert" class="stock-alert"></div>
+
+<!-- VENTAS -->
+<section id="ventas" class="section active">
+    <div class="section-title">
+        <div><h2>Nueva venta</h2><p>Registra los productos que lleva el cliente.</p></div>
+        <div class="section-actions">
+            <button class="secondary-btn" id="scanBarcodeBtn">📷 <span>Escanear</span></button>
+            <button class="secondary-btn" id="clearSaleBtn">🔄 <span>Nueva venta</span></button>
+        </div>
+    </div>
+
+    <div class="sales-layout">
+        <div class="products-panel">
+            <div class="search-box"><input type="text" id="productSearch" placeholder="🔎 Buscar producto... (tecla /)"></div>
+            <div class="section-label">
+                <h3>⭐ Más vendidos</h3>
+                <button class="link-btn" id="showAllProductsBtn">Ver todos →</button>
+            </div>
+            <div id="productsGrid" class="products-grid"></div>
+
+            <div class="section-label" id="posCategoriasLabel" style="display:none;">
+                <h3>🏷️ Categorías</h3>
+                <small class="pos-hint">Toca una para ver sus productos</small>
+            </div>
+            <div id="posCategorias" class="pos-categorias"></div>
+
+            <div class="quick-price">
+                <h3>⚡ Venta rápida</h3>
+                <p>Para productos que no estén en el inventario, o venta rápida por unidad.</p>
+
+                <div class="quick-toggle">
+                    <label class="radio-label">
+                        <input type="radio" name="quickMode" value="price" checked> 💵 Precio libre
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="quickMode" value="unit"> 🔢 Por unidad
+                    </label>
+                </div>
+
+                <div id="quickPriceBox" class="quick-row">
+                    <input type="number" id="quickPrice" placeholder="Precio" min="0" inputmode="numeric">
+                    <button id="addQuickProduct">+ Agregar</button>
+                </div>
+
+                <div id="quickUnitBox" class="quick-unit-box" style="display:none;">
+                    <label for="quickUnitProduct">Producto por peso:</label>
+                    <select id="quickUnitProduct"><option value="">-- Seleccionar --</option></select>
+                    <label for="quickUnitQty" style="margin-top:8px;">Cantidad de unidades:</label>
+                    <input type="number" id="quickUnitQty" min="1" step="1" placeholder="Ej: 3" inputmode="numeric">
+                    <button id="addQuickUnit" class="primary-btn" style="width:100%; margin-top:10px;">🔢 Agregar unidades</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="cart-panel">
+            <div class="cart-header"><h3>🛒 Venta actual</h3><span id="cartCount">0 productos</span></div>
+            <div id="cartItems" class="cart-items"><div class="empty-cart">No hay productos en la venta.</div></div>
+
+            <div class="totals">
+                <div class="total-row"><span>Total</span><strong id="saleTotal">$0</strong></div>
+
+                <div class="optional-client">
+                    <label for="saleClientName">👤 Cliente (opcional)</label>
+                    <input type="text" id="saleClientName" placeholder="Nombre para la factura">
+                    <input type="text" id="saleClientId" placeholder="Cédula (opcional)" style="margin-top:6px;">
+                </div>
+
+                <div class="payment-methods">
+                    <label class="radio-label"><input type="radio" name="paymentType" value="cash" checked> 💵 Efectivo</label>
+                    <label class="radio-label"><input type="radio" name="paymentType" value="transfer"> 📱 Transferencia</label>
+                    <label class="radio-label"><input type="radio" name="paymentType" value="credit"> 📝 Fiado</label>
+                </div>
+
+                <div id="cashBox">
+                    <label for="cashReceived">Dinero recibido</label>
+                    <input type="number" id="cashReceived" placeholder="$0" min="0" inputmode="numeric">
+                    <div class="quick-cash-buttons">
+                        <button type="button" class="quick-cash-btn" data-amount="2000">$2k</button>
+                        <button type="button" class="quick-cash-btn" data-amount="5000">$5k</button>
+                        <button type="button" class="quick-cash-btn" data-amount="10000">$10k</button>
+                        <button type="button" class="quick-cash-btn" data-amount="20000">$20k</button>
+                        <button type="button" class="quick-cash-btn" data-amount="50000">$50k</button>
+                        <button type="button" class="quick-cash-btn" data-amount="100000">$100k</button>
+                    </div>
+                    <div class="change-box"><span>Cambio</span><strong id="changeAmount">$0</strong></div>
+                </div>
+
+                <div id="transferBox" class="transfer-box" style="display:none;">
+                    <p>📱 <strong>Pago por transferencia</strong></p>
+                    <p class="hint">Verifica el pago en tu app bancaria antes de confirmar.</p>
+                </div>
+
+                <div id="creditClientBox" class="credit-client-box" style="display:none;">
+                    <label for="creditClient">Cliente fiado:</label>
+                    <select id="creditClient"><option value="">-- Seleccionar --</option></select>
+                    <button type="button" class="secondary-btn small-btn" id="quickAddClient">+ Nuevo cliente</button>
+
+                    <div id="creditDetailsBox" style="margin-top:12px;">
+                        <label for="creditAbono">💵 Abono inicial (opcional)</label>
+                        <input type="number" id="creditAbono" min="0" placeholder="$0" inputmode="numeric">
+
+                        <label for="creditEstimatedDate" style="margin-top:10px;">📅 Fecha estimada de pago (opcional)</label>
+                        <input type="date" id="creditEstimatedDate">
+
+                        <label for="creditNote" style="margin-top:10px;">📝 Nota del fiado (opcional)</label>
+                        <input type="text" id="creditNote" placeholder="Ej: paga cuando le llegue la quincena" maxlength="80">
+
+                        <div id="creditSummary" class="credit-summary" style="display:none;">
+                            <div><span>Total venta:</span><strong id="creditTotalDisplay">$0</strong></div>
+                            <div><span>Abono inicial:</span><strong id="creditAbonoDisplay">$0</strong></div>
+                            <div class="total"><span>Queda fiado:</span><strong id="creditFiadoDisplay">$0</strong></div>
+                        </div>
+
+                        <div id="creditLimitWarning" class="credit-limit-warning" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <button id="completeSale" class="primary-btn" disabled>✅ Finalizar venta (Enter)</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- INVENTARIO -->
+<section id="inventario" class="section">
+    <div class="section-title">
+        <div><h2>📦 Inventario</h2><p>Administra los productos de tu tienda.</p></div>
+        <div class="section-actions">
+            <button class="secondary-btn" id="deadProductsBtn">💀 <span>Sin movimiento</span></button>
+            <button class="secondary-btn" id="suggestBuyBtn">💡 <span>¿Qué comprar?</span></button>
+            <button class="secondary-btn" id="manageCategoriesBtn">🏷️ <span>Categorías</span></button>
+            <button class="primary-btn" id="newProductBtn">+ <span>Nuevo producto</span></button>
+        </div>
+    </div>
+
+    <div class="inventory-summary">
+        <div class="summary-card"><span>Productos</span><strong id="totalProducts">0</strong></div>
+        <div class="summary-card"><span>Unidades</span><strong id="totalStock">0</strong></div>
+        <div class="summary-card warning"><span>Stock bajo</span><strong id="lowStock">0</strong></div>
+        <div class="summary-card danger"><span>Agotados</span><strong id="outStock">0</strong></div>
+    </div>
+
+    <div class="inventory-tabs">
+        <button class="inventory-tab active" data-tab="active">📦 Activos (<span id="tabCountActive">0</span>)</button>
+        <button class="inventory-tab" data-tab="archived">🗄️ Archivados (<span id="tabCountArchived">0</span>)</button>
+    </div>
+
+    <div class="inventory-filters">
+        <div class="filter-search"><input type="text" id="inventorySearch" placeholder="🔎 Buscar producto por nombre..."></div>
+        <select id="inventoryCategoryFilter"><option value="">Todas las categorías</option></select>
+        <select id="inventoryStatusFilter">
+            <option value="">Todos los estados</option>
+            <option value="ok">✅ Disponible</option>
+            <option value="low">⚠️ Stock bajo</option>
+            <option value="out">🚫 Agotado</option>
+        </select>
+        <select id="inventorySort">
+            <option value="name">Nombre (A-Z)</option>
+            <option value="name_desc">Nombre (Z-A)</option>
+            <option value="stock">Menor stock primero</option>
+            <option value="stock_desc">Mayor stock primero</option>
+            <option value="price">Menor precio primero</option>
+            <option value="price_desc">Mayor precio primero</option>
+        </select>
+        <button class="secondary-btn" id="clearInventoryFilters">Limpiar</button>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr><th>Producto</th><th>Categoría</th><th>Compra</th><th>Venta</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr>
+            </thead>
+            <tbody id="inventoryTable"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- CLIENTES -->
+<section id="clientes" class="section">
+    <div class="section-title">
+        <div><h2>👥 Clientes y Fiados</h2><p>Controla quién te debe y cuánto.</p></div>
+        <button class="primary-btn" id="newClientBtn">+ <span>Nuevo cliente</span></button>
+    </div>
+    <div class="inventory-summary">
+        <div class="summary-card"><span>Clientes</span><strong id="totalClients">0</strong></div>
+        <div class="summary-card warning"><span>📅 Estimados cumplidos</span><strong id="expiredCredits">0</strong></div>
+        <div class="summary-card danger"><span>Total por cobrar</span><strong id="totalDebt">$0</strong></div>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Nombre</th><th>Documento</th><th>Teléfono</th><th>Saldo</th><th>Acciones</th></tr></thead>
+            <tbody id="clientsTable"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- PROVEEDORES -->
+<section id="proveedores" class="section">
+    <div class="section-title">
+        <div><h2>🚚 Proveedores</h2><p>Contacta a tus proveedores para reabastecer.</p></div>
+        <button class="primary-btn" id="newProviderBtn">+ <span>Nuevo proveedor</span></button>
+    </div>
+    <div class="inventory-summary">
+        <div class="summary-card"><span>Proveedores</span><strong id="totalProviders">0</strong></div>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Productos</th><th>Acciones</th></tr></thead>
+            <tbody id="providersTable"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- REPORTES -->
+<section id="reportes" class="section">
+    <div class="section-title">
+        <div><h2>📊 Reportes</h2><p>Resumen de la actividad de tu negocio.</p></div>
+        <div class="section-actions">
+            <select id="reportPeriod">
+                <option value="today">Hoy</option>
+                <option value="week">Últimos 7 días</option>
+                <option value="month">Últimos 30 días</option>
+                <option value="all">Todo el historial</option>
+            </select>
+            <button class="secondary-btn" id="exportCsvBtn">📄 <span>Exportar reporte</span></button>
+        </div>
+    </div>
+
+    <div class="reports-grid">
+        <div class="report-card"><span>Ventas</span><strong id="todaySales">$0</strong></div>
+        <div class="report-card"><span>Transacciones</span><strong id="todayTransactions">0</strong></div>
+        <div class="report-card"><span>Productos vendidos</span><strong id="todayProducts">0</strong></div>
+        <div class="report-card"><span>Ganancia estimada</span><strong id="todayProfit">$0</strong></div>
+    </div>
+
+    <div class="chart-container"><h3>📈 Ventas últimos 7 días</h3><canvas id="salesChart"></canvas></div>
+    <div class="chart-container"><h3>🏆 Productos más vendidos</h3><canvas id="topProductsChart"></canvas></div>
+    <div class="chart-container"><h3>🏷️ Ventas por categoría</h3><canvas id="categoryChart"></canvas></div>
+
+    <div class="report-section">
+        <h3>Últimas ventas</h3>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>Fecha</th><th>Hora</th><th>Productos</th><th>Total</th><th>Tipo</th><th>Acciones</th></tr></thead>
+                <tbody id="salesHistory"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- CAJA -->
+<section id="caja" class="section">
+    <div class="section-title">
+        <div><h2>💰 Cierre de Caja</h2><p>Resumen del día para tu control.</p></div>
+        <button class="primary-btn" id="closeCashBtn">🖨️ <span>Generar cierre</span></button>
+    </div>
+    <div id="cashReport" class="cash-report"></div>
+</section>
+
+</main>
+
+<!-- MODAL PRODUCTO -->
+<div id="productModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2 id="modalTitle">Nuevo producto</h2><button id="closeModal">✕</button></div>
+        <form id="productForm">
+            <input type="hidden" id="productId">
+            <label>Nombre del producto <input type="text" id="productName" required></label>
+            <label>Código de barras (opcional) <input type="text" id="productBarcode" placeholder="Escanea o escribe"></label>
+            <label>
+                Categoría
+                <div class="category-row">
+                    <select id="productCategory"></select>
+                    <button type="button" class="secondary-btn small-btn" id="addCategoryBtn">+ Nueva</button>
+                </div>
+            </label>
+            <p id="categoryHint" class="category-hint"></p>
+
+            <div id="unitFields">
+                <label>Precio de compra <input type="number" id="purchasePrice" min="0" inputmode="numeric"></label>
+                <label>Precio de venta <input type="number" id="salePrice" min="0" inputmode="numeric"></label>
+                <label>Cantidad disponible <input type="number" id="stock" min="0" inputmode="numeric"></label>
+            </div>
+
+            <div id="weightFields" style="display:none;">
+                <div class="info-box">⚖️ Producto por peso — Elige la unidad base del inventario</div>
+                <label>
+                    Unidad base del inventario
+                    <select id="baseUnit">
+                        <option value="kg">Kilogramos (kg)</option>
+                        <option value="lb">Libras (lb)</option>
+                        <option value="arroba">Arrobas (@)</option>
+                    </select>
+                </label>
+                <label>Precio de compra <span id="labelPurchaseUnit">por kg</span><input type="number" id="purchasePriceBase" min="0" inputmode="numeric"></label>
+                <label>Precio de venta <span id="labelSaleUnit">por kg</span><input type="number" id="salePriceBase" min="0" inputmode="numeric"></label>
+
+                <div class="converter-box">
+                    <p class="converter-title">💡 Precios equivalentes calculados automáticamente:</p>
+                    <div class="price-equivalences">
+                        <div class="price-eq-row"><span>Por kilogramo (kg):</span><strong id="eqPriceKg">$0</strong></div>
+                        <div class="price-eq-row"><span>Por libra (lb):</span><strong id="eqPriceLb">$0</strong></div>
+                        <div class="price-eq-row"><span>Por arroba (@):</span><strong id="eqPriceArroba">$0</strong></div>
+                    </div>
+                </div>
+
+                <label><span id="stockLabelWeight">Peso disponible (kg)</span><input type="number" id="stockWeight" min="0" step="0.01" inputmode="decimal"></label>
+
+                <label>
+                    Peso promedio por unidad (opcional)
+                    <input type="number" id="unitWeight" min="0" step="0.001" inputmode="decimal" placeholder="Ej: 0.2 (para vender 1 tomate ≈ 200g)">
+                </label>
+                <p class="info-box" style="font-size:12px;">
+                    💡 Si lo defines, podrás vender este producto por unidades (ej: "2 tomates").
+                    Si lo dejas vacío, solo se podrá vender por peso o por precio.
+                </p>
+            </div>
+
+            <label>Stock mínimo <input type="number" id="minimumStock" min="0" value="5" inputmode="numeric"></label>
+
+            <div class="form-actions">
+                <button type="button" class="secondary-btn" id="cancelProduct">Cancelar</button>
+                <button type="submit" class="primary-btn" id="saveProductBtn">Guardar producto</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL CATEGORÍA -->
+<div id="categoryModal" class="modal">
+    <div class="modal-content" style="max-width:440px;">
+        <div class="modal-header"><h2 id="categoryModalTitle">➕ Nueva categoría</h2><button id="closeCategoryModal">✕</button></div>
+        <form id="categoryForm">
+            <input type="hidden" id="categoryEditId">
+            <label>Nombre <input type="text" id="newCategoryName" required maxlength="30" placeholder="Ej: Snacks"></label>
+
+            <label>
+                Emoji de la categoría
+                <div class="emoji-select-row">
+                    <div id="selectedEmojiPreview" class="selected-emoji">🏷️</div>
+                    <button type="button" class="secondary-btn" id="openEmojiPickerBtn">😀 Elegir emoji</button>
+                </div>
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="newCategoryWeight">
+                <span>Esta categoría se vende por peso (kg/lb/@)</span>
+            </label>
+
+            <div class="form-actions">
+                <button type="button" class="secondary-btn" id="cancelCategory">Cancelar</button>
+                <button type="submit" class="primary-btn" id="saveCategoryBtn">Agregar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL GESTIONAR CATEGORÍAS -->
+<div id="manageCategoriesModal" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header"><h2>🏷️ Categorías</h2><button id="closeManageCategoriesModal">✕</button></div>
+        <p style="color:var(--muted); font-size:13px; margin-bottom:15px;">
+            Aquí puedes crear, editar o eliminar las categorías de tu tienda.
+        </p>
+        <button class="primary-btn" id="newCategoryFromManage" style="width:100%; margin-bottom:15px;">+ Nueva categoría</button>
+        <div id="categoriesList" class="categories-list"></div>
+    </div>
+</div>
+
+<!-- MODAL EMOJI PICKER -->
+<div id="emojiPickerModal" class="modal">
+    <div class="modal-content emoji-picker-content">
+        <div class="modal-header"><h2>😀 Elegir emoji</h2><button id="closeEmojiPickerModal">✕</button></div>
+        <div class="search-box" style="margin-bottom:12px;">
+            <input type="text" id="emojiSearch" placeholder="🔎 Buscar emoji...">
+        </div>
+        <div id="emojiPickerBody" class="emoji-picker-body"></div>
+    </div>
+</div>
+
+<!-- MODAL POS CATEGORÍA -->
+<div id="posCategoriaModal" class="modal">
+    <div class="modal-content pos-modal-content">
+        <div class="modal-header pos-modal-header">
+            <h2 id="posCategoriaTitle">🏷️ Categoría</h2>
+            <button id="closePosCategoriaModal">✕</button>
+        </div>
+        <div class="search-box" style="margin-bottom:14px;">
+            <input type="text" id="posCategoriaSearch" placeholder="🔎 Buscar dentro de la categoría...">
+        </div>
+        <div id="posCategoriaGrid" class="pos-grid"></div>
+        <div id="posCategoriaEmpty" class="pos-empty" style="display:none;">
+            No hay productos disponibles en esta categoría.
+        </div>
+        <div class="pos-footer">
+            <div class="pos-footer-info">
+                <span id="posContador">0 productos agregados</span>
+                <strong id="posTotal">$0</strong>
+            </div>
+            <button class="primary-btn" id="posListoBtn">✅ Listo</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CLIENTE -->
+<div id="clientModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2 id="clientModalTitle">Nuevo cliente</h2><button id="closeClientModal">✕</button></div>
+        <form id="clientForm">
+            <input type="hidden" id="clientId">
+            <label>Nombre <input type="text" id="clientName" required></label>
+            <div class="row-two">
+                <label>Tipo de documento
+                    <select id="clientDocType">
+                        <option value="CC">Cédula (CC)</option>
+                        <option value="NIT">NIT</option>
+                        <option value="CE">Cédula extranjería (CE)</option>
+                        <option value="PP">Pasaporte (PP)</option>
+                    </select>
+                </label>
+                <label>Número de documento
+                    <input type="text" id="clientDocNumber" placeholder="Ej: 1234567890">
+                </label>
+            </div>
+            <label>Teléfono (opcional) <input type="tel" id="clientPhone" inputmode="tel"></label>
+            <label>Dirección (opcional) <input type="text" id="clientAddress" placeholder="Ej: Calle 5 #3-42"></label>
+            <label>Saldo inicial (opcional) <input type="number" id="clientBalance" min="0" value="0" inputmode="numeric"></label>
+
+            <div class="info-box" style="font-size:12px; margin-top:10px;">
+                💡 <strong>Tope de fiado por cliente:</strong> Si lo dejas vacío, se usará el tope global de la configuración.
+            </div>
+
+            <label>Tope de fiado personalizado (opcional)
+                <input type="number" id="clientCreditLimit" min="0" placeholder="Ej: 100000" inputmode="numeric">
+            </label>
+            <label>Motivo del cambio de tope (opcional)
+                <input type="text" id="clientCreditLimitNote" placeholder="Ej: cliente confiable, lleva 6 meses cumpliendo" maxlength="100">
+            </label>
+
+            <div class="form-actions">
+                <button type="button" class="secondary-btn" id="cancelClient">Cancelar</button>
+                <button type="submit" class="primary-btn" id="saveClientBtn">Guardar cliente</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL DETALLE CLIENTE -->
+<div id="clientDetailModal" class="modal">
+    <div class="modal-content client-detail-content">
+        <div class="modal-header"><h2 id="clientDetailTitle">Detalle del cliente</h2><button id="closeClientDetailModal">✕</button></div>
+        <div id="clientDetailContent"></div>
+    </div>
+</div>
+
+<!-- MODAL DETALLE FIADO -->
+<div id="creditDetailModal" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header"><h2 id="creditDetailTitle">Detalle del fiado</h2><button id="closeCreditDetailModal">✕</button></div>
+        <div id="creditDetailContent"></div>
+    </div>
+</div>
+
+<!-- MODAL PROVEEDOR -->
+<div id="providerModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2 id="providerModalTitle">Nuevo proveedor</h2><button id="closeProviderModal">✕</button></div>
+        <form id="providerForm">
+            <input type="hidden" id="providerId">
+            <label>Nombre <input type="text" id="providerName" required></label>
+            <label>Teléfono / WhatsApp <input type="tel" id="providerPhone" required inputmode="tel"></label>
+            <label>¿Qué productos surte? <input type="text" id="providerProducts" placeholder="Ej: Bebidas, snacks"></label>
+            <div class="form-actions">
+                <button type="button" class="secondary-btn" id="cancelProvider">Cancelar</button>
+                <button type="submit" class="primary-btn">Guardar proveedor</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL ABONO -->
+<div id="abonoModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2>Registrar abono</h2><button id="closeAbonoModal">✕</button></div>
+        <form id="abonoForm">
+            <input type="hidden" id="abonoClientId">
+            <p id="abonoClientName" class="abono-info"></p>
+            <p id="abonoCurrentBalance" class="abono-info"></p>
+            <label>Monto del abono <input type="number" id="abonoAmount" min="1" required inputmode="numeric"></label>
+            <div class="form-actions">
+                <button type="button" class="secondary-btn" id="cancelAbono">Cancelar</button>
+                <button type="submit" class="primary-btn" id="saveAbonoBtn">Registrar abono</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL ESTADO DE CUENTA -->
+<div id="accountStatementModal" class="modal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header"><h2>📄 Estado de cuenta</h2><button id="closeAccountStatementModal">✕</button></div>
+        <div id="accountStatementContent"></div>
+        <div class="form-actions" style="border-top:none; padding-top:10px;">
+            <button type="button" class="secondary-btn" id="printAccountStatement">🖨️ Imprimir</button>
+            <button type="button" class="primary-btn" id="sendAccountStatementWa" style="background:#25d366;">💬 Enviar por WhatsApp</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL COBRO RÁPIDO -->
+<div id="quickPaymentModal" class="modal">
+    <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header"><h2>💰 Cobrar todo</h2><button id="closeQuickPaymentModal">✕</button></div>
+        <p class="abono-info" id="quickPaymentInfo"></p>
+        <p style="color:var(--muted); font-size:13px; margin-bottom:15px;">
+            Esta acción registrará un abono por el saldo total pendiente del cliente.
+        </p>
+        <div class="form-actions">
+            <button type="button" class="secondary-btn" id="cancelQuickPayment">Cancelar</button>
+            <button type="button" class="primary-btn" id="confirmQuickPayment">✅ Confirmar cobro</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ESCANEAR -->
+<div id="scanModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2>📷 Escanear código</h2><button id="closeScanModal">✕</button></div>
+        <div id="qrReader"></div>
+        <p class="scan-help">Apunta la cámara al código de barras.</p>
+    </div>
+</div>
+
+<!-- MODAL TODOS LOS PRODUCTOS -->
+<div id="allProductsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2>📋 Todos los productos</h2><button id="closeAllProductsModal">✕</button></div>
+        <div class="search-box"><input type="text" id="allProductsSearch" placeholder="🔎 Buscar producto..."></div>
+        <div id="allProductsList" class="products-grid" style="margin-top:15px;"></div>
+    </div>
+</div>
+
+<!-- MODAL PESO -->
+<div id="weightModal" class="modal">
+    <div class="modal-content" style="max-width:440px;">
+        <div class="modal-header"><h2>⚖️ Vender por peso</h2><button id="closeWeightModal">✕</button></div>
+        <div class="weight-product-info">
+            <p id="weightProductName" class="weight-product-title"></p>
+            <p id="weightProductPrices" class="weight-product-prices"></p>
+        </div>
+
+        <div class="weight-tabs">
+            <button type="button" class="weight-tab active" data-mode="weight">⚖️ Por peso</button>
+            <button type="button" class="weight-tab" data-mode="price">💵 Por precio</button>
+            <button type="button" class="weight-tab" data-mode="unit" id="weightTabUnit" style="display:none;">🔢 Por unidad</button>
+        </div>
+
+        <div id="weightModeWeight" class="weight-mode">
+            <label>
+                Unidad de venta
+                <select id="weightUnit">
+                    <option value="kg">Kilogramos (kg)</option>
+                    <option value="lb">Libras (lb)</option>
+                    <option value="arroba">Arrobas (@)</option>
+                </select>
+            </label>
+            <label>Cantidad <input type="number" id="weightAmount" min="0.001" step="0.001" inputmode="decimal" placeholder="Ej: 2.5"></label>
+            <div class="change-box" style="margin-top:15px;"><span>Subtotal</span><strong id="weightSubtotal">$0</strong></div>
+            <p id="weightConversion" class="weight-conversion"></p>
+        </div>
+
+        <div id="weightModePrice" class="weight-mode" style="display:none;">
+            <label>
+                Unidad de referencia
+                <select id="weightPriceUnit">
+                    <option value="kg">Kilogramos (kg)</option>
+                    <option value="lb">Libras (lb)</option>
+                    <option value="arroba">Arrobas (@)</option>
+                </select>
+            </label>
+            <label>Monto en pesos <input type="number" id="weightPriceAmount" min="0" step="1" inputmode="numeric" placeholder="Ej: 2000"></label>
+            <div class="change-box" style="margin-top:15px;"><span>Peso equivalente</span><strong id="weightPriceConversion">0 kg</strong></div>
+            <p class="weight-conversion">El sistema calculará automáticamente cuánto peso dar según el precio.</p>
+        </div>
+
+        <div id="weightModeUnit" class="weight-mode" style="display:none;">
+            <label>Cantidad de unidades <input type="number" id="weightUnitQty" min="1" step="1" inputmode="numeric" placeholder="Ej: 3"></label>
+            <div class="change-box" style="margin-top:15px;"><span>Subtotal</span><strong id="weightUnitSubtotal">$0</strong></div>
+            <p id="weightUnitInfo" class="weight-conversion"></p>
+        </div>
+
+        <div class="form-actions">
+            <button type="button" class="secondary-btn" id="cancelWeight">Cancelar</button>
+            <button type="button" class="primary-btn" id="confirmWeight">Agregar a la venta</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SUGERENCIA -->
+<div id="suggestModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2>💡 Sugerencia de compra</h2><button id="closeSuggestModal">✕</button></div>
+        <div id="suggestContent"></div>
+    </div>
+</div>
+
+<!-- MODAL PRODUCTOS SIN MOVIMIENTO -->
+<div id="deadProductsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><h2>💀 Productos sin movimiento (30 días)</h2><button id="closeDeadProductsModal">✕</button></div>
+        <div id="deadProductsContent"></div>
+    </div>
+</div>
+
+<!-- MODAL RECIBO -->
+<div id="receiptModal" class="modal">
+    <div class="modal-content receipt-content" id="receiptContent"></div>
+</div>
+
+<!-- MODAL VENTA EXITOSA -->
+<div id="successModal" class="modal">
+    <div class="modal-content success-content">
+        <div class="success-icon">✅</div>
+        <h2 class="success-title">¡Venta registrada!</h2>
+        <div class="success-details" id="successDetails"></div>
+        <div class="success-actions">
+            <button class="primary-btn" id="printReceiptBtn">🖨️ Imprimir recibo</button>
+            <button class="secondary-btn" id="closeSuccessBtn">Listo</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ANULAR VENTA -->
+<div id="cancelSaleModal" class="modal">
+    <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header"><h2>🔒 Anular venta</h2><button id="closeCancelSaleModal">✕</button></div>
+        <p class="abono-info" id="cancelSaleInfo"></p>
+        <label>
+            Contraseña temporal
+            <input type="text" id="cancelSalePassword" placeholder="XXXX-XXXX" style="text-transform:uppercase; text-align:center; font-family:'Courier New', monospace; letter-spacing:2px;">
+        </label>
+        <p class="password-hint">💡 Las contraseñas son de un solo uso y expiran en 15 minutos. Solicítala a soporte por WhatsApp.</p>
+        <button type="button" class="secondary-btn" id="forgotPasswordBtn" style="width:100%; margin-top:10px;">📱 Solicitar contraseña temporal</button>
+        <div class="form-actions">
+            <button type="button" class="secondary-btn" id="cancelCancelSale">Cancelar</button>
+            <button type="button" class="primary-btn" id="confirmCancelSale">Anular venta</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SOLICITAR CONTRASEÑA TEMPORAL -->
+<div id="requestPasswordModal" class="modal">
+    <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header"><h2>🔐 Solicitar contraseña temporal</h2><button id="closeRequestPasswordModal">✕</button></div>
+        <div class="info-box">Envía este código a soporte por WhatsApp. Ellos te darán una contraseña temporal válida por 15 minutos.</div>
+        <div class="temp-code-box">
+            <p class="temp-code-label">Código de solicitud:</p>
+            <div class="temp-code-value" id="tempCodeValue">----</div>
+        </div>
+        <p class="password-hint" style="text-align:center;">Este código expira en <strong id="tempCodeTimer">15:00</strong></p>
+        <button type="button" class="primary-btn" id="sendTempCodeBtn" style="width:100%;">💬 Enviar por WhatsApp</button>
+    </div>
+</div>
+
+<!-- MODAL BIENVENIDA -->
+<div id="welcomeModal" class="modal show">
+    <div class="modal-content welcome-content">
+        <div class="welcome-slide active" data-slide="1">
+            <div class="welcome-illustration">👋</div>
+            <h1 class="welcome-title">¡Hola! Somos <span class="welcome-brand">J2</span></h1>
+            <p class="welcome-text">El punto de venta pensado para tiendas de barrio como la tuya.</p>
+            <div class="welcome-features">
+                <div class="welcome-feature"><span>🇨🇴</span><small>Hecho en Colombia</small></div>
+                <div class="welcome-feature"><span>⚡</span><small>Rápido y fácil</small></div>
+                <div class="welcome-feature"><span>🔒</span><small>Tus datos son tuyos</small></div>
+            </div>
+        </div>
+
+        <div class="welcome-slide" data-slide="2">
+            <div class="welcome-illustration">🎯</div>
+            <h1 class="welcome-title">¿Qué puedes hacer?</h1>
+            <div class="welcome-benefits">
+                <div class="benefit-item">
+                    <span class="benefit-icon">🧮</span>
+                    <div><strong>Vender en segundos</strong><small>Con cálculo automático de cambio</small></div>
+                </div>
+                <div class="benefit-item">
+                    <span class="benefit-icon">📦</span>
+                    <div><strong>Controlar tu inventario</strong><small>Sin cuadernos, con alertas inteligentes</small></div>
+                </div>
+                <div class="benefit-item">
+                    <span class="benefit-icon">💰</span>
+                    <div><strong>Cobrar fiados</strong><small>Con recordatorio por WhatsApp</small></div>
+                </div>
+                <div class="benefit-item">
+                    <span class="benefit-icon">📊</span>
+                    <div><strong>Ver tus ganancias</strong><small>Reportes diarios, semanales y mensuales</small></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="welcome-slide" data-slide="3">
+            <div class="welcome-illustration">💎</div>
+            <h1 class="welcome-title">Elige cómo empezar</h1>
+            <p class="welcome-text">Prueba J2 gratis por 7 días con todas las funciones. Sin tarjeta, sin compromiso.</p>
+            <div class="welcome-actions">
+                <button class="welcome-btn-primary" id="startDemoBtn">
+                    <span class="welcome-btn-icon">🎁</span>
+                    <div><strong>Probar gratis 7 días</strong><small>Acceso a todo ProMax</small></div>
+                </button>
+                <button class="welcome-btn-secondary" id="activateLicenseBtn">
+                    <span class="welcome-btn-icon">🔑</span>
+                    <div><strong>Ya tengo licencia</strong><small>Activar mi código</small></div>
+                </button>
+            </div>
+            <p class="welcome-legal">
+                Al continuar aceptas que tus datos se guardan <strong>únicamente en tu dispositivo</strong>.
+                Nosotros no tenemos acceso a ellos.
+            </p>
+        </div>
+
+        <div class="welcome-nav">
+            <div class="welcome-dots">
+                <span class="welcome-dot active" data-dot="1"></span>
+                <span class="welcome-dot" data-dot="2"></span>
+                <span class="welcome-dot" data-dot="3"></span>
+            </div>
+            <div class="welcome-nav-buttons">
+                <button class="secondary-btn" id="welcomePrev" style="display:none;">← Atrás</button>
+                <button class="primary-btn" id="welcomeNext">Siguiente →</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL LICENCIA -->
+<div id="licenseModal" class="modal">
+    <div class="modal-content license-content">
+        <div class="modal-header">
+            <h2>🔑 Activar licencia</h2>
+            <button id="closeLicenseModal" style="display:none;">✕</button>
+        </div>
+
+        <div id="licenseStep1" class="license-step">
+            <div class="license-header">
+                <img src="logo.png" alt="J2" class="license-logo">
+                <h1>J2</h1>
+                <p>Punto de venta e inventario</p>
+            </div>
+
+            <h2 id="licenseTitle">Activa tu licencia</h2>
+            <p id="licenseSubtitle">Ingresa el código que te enviamos.</p>
+
+            <label>
+                Código de licencia
+                <textarea id="licenseCode" placeholder="Pega aquí el código completo que te enviamos" rows="4" style="text-transform:uppercase; font-family:'Courier New', monospace; font-size:12px; resize:vertical;"></textarea>
+            </label>
+
+            <button class="primary-btn" id="activateLicense" style="width:100%;">🚀 Activar licencia</button>
+
+            <p class="license-help">
+                ¿No tienes código?
+                <a href="#" id="requestTrial">Escríbenos por WhatsApp</a>
+            </p>
+        </div>
+
+        <div id="licenseStep2" class="license-step" style="display:none;">
+            <div class="license-header">
+                <h1>🎉 ¡Activado!</h1>
+                <p>Tu licencia está lista para usarse</p>
+            </div>
+            <div class="license-info-box">
+                <div><span>Plan:</span> <strong id="activatedPlan"></strong></div>
+                <div><span>Vence:</span> <strong id="activatedExpiry"></strong></div>
+                <div><span>Días restantes:</span> <strong id="activatedDays"></strong></div>
+            </div>
+            <button class="primary-btn" id="startApp" style="width:100%;">✨ Comenzar a usar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ACTIVACIÓN DE PLAN -->
+<div id="activationModal" class="modal">
+    <div class="modal-content license-content">
+        <div class="modal-header">
+            <h2 id="activationModalTitle">🔓 Activar plan</h2>
+            <button id="closeActivationModal">✕</button>
+        </div>
+
+        <div id="activationStep1" class="license-step">
+            <p id="activationSubtitle" style="color:var(--muted); font-size:14px; margin-bottom:22px;">Pega el código de licencia que te enviamos por WhatsApp.</p>
+            <label>
+                Código de licencia
+                <textarea id="activationCode" placeholder="Pega aquí el código completo que te enviamos" rows="4" style="text-transform:uppercase; font-family:'Courier New', monospace; font-size:12px; resize:vertical;"></textarea>
+            </label>
+            <button class="primary-btn" id="confirmActivation" style="width:100%;">🚀 Activar licencia</button>
+            <button class="secondary-btn" id="requestPlanWa" style="width:100%; margin-top:10px; background:#25d366; color:white; border:none;">💬 Pedir este plan por WhatsApp</button>
+        </div>
+
+        <div id="activationStep2" class="license-step" style="display:none;">
+            <div class="license-header">
+                <h1>🎉 ¡Activado!</h1>
+                <p>Tu licencia está lista para usarse</p>
+            </div>
+            <div class="license-info-box">
+                <div><span>Plan:</span> <strong id="activatedPlanModal"></strong></div>
+                <div><span>Vence:</span> <strong id="activatedExpiryModal"></strong></div>
+                <div><span>Días restantes:</span> <strong id="activatedDaysModal"></strong></div>
+            </div>
+            <button class="primary-btn" id="startAppFromModal" style="width:100%;">✨ Comenzar a usar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DEMO ACTIVADO -->
+<div id="demoActivatedModal" class="modal">
+    <div class="modal-content demo-activated-content">
+        <div class="success-icon">🎉</div>
+        <h2 class="success-title">¡Prueba activada!</h2>
+        <p class="demo-activated-text">
+            Tienes <strong>7 días gratis</strong> con acceso a todas las funciones de <strong>ProMax</strong>.
+        </p>
+        <div class="demo-activated-details">
+            <div class="demo-detail-row"><span>📅 Vence:</span><strong id="demoExpiryDate"></strong></div>
+            <div class="demo-detail-row"><span>💎 Plan:</span><strong>ProMax (completo)</strong></div>
+            <div class="demo-detail-row"><span>🎯 Sin límites:</span><strong>Sí, todo desbloqueado</strong></div>
+        </div>
+        <div class="info-box" style="margin-top:15px;">
+            💡 Después de 7 días, podrás activar una licencia para seguir usando todas las funciones.
+        </div>
+        <button class="primary-btn" id="startDemoApp" style="width:100%; margin-top:15px;">🚀 ¡Empezar a vender!</button>
+    </div>
+</div>
+
+<!-- MODAL PLANES -->
+<div id="plansModal" class="modal">
+    <div class="modal-content plans-content">
+        <div class="modal-header"><h2>💎 Planes disponibles</h2><button id="closePlansModal">✕</button></div>
+        <p style="color:var(--muted); font-size:13px; margin-bottom:20px; text-align:center;">
+            Todos los planes incluyen actualizaciones. Los precios se publicarán muy pronto.
+        </p>
+        <div class="plans-grid">
+            <div class="plan-card" data-plan="basic">
+                <h3>🆓 Básico</h3>
+                <div class="plan-price">
+                    <span style="font-size:14px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">💰 Precios disponibles pronto</span>
+                    <small style="font-size:11px; color:var(--muted); font-weight:500;">Escríbenos por WhatsApp para más info</small>
+                </div>
+                <ul>
+                    <li>✅ Ventas ilimitadas</li>
+                    <li>✅ Hasta 30 productos</li>
+                    <li>✅ Cálculo de cambio</li>
+                    <li>❌ Ventas fiadas</li>
+                    <li>❌ Reportes avanzados</li>
+                    <li>❌ Código de barras</li>
+                    <li>❌ Respaldos</li>
+                </ul>
+                <div class="plan-actions">
+                    <button class="plan-btn-primary" onclick="activarPlanDesdeModal('basic')">🔓 Activar este plan</button>
+                    <button class="plan-btn-wa" onclick="pedirPlanWhatsApp('basic')">💬 Pedir por WhatsApp</button>
+                </div>
+            </div>
+            <div class="plan-card featured" data-plan="pro">
+                <div class="plan-badge">⭐ Recomendado</div>
+                <h3>Pro</h3>
+                <div class="plan-price">
+                    <span style="font-size:14px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">💰 Precios disponibles pronto</span>
+                    <small style="font-size:11px; color:var(--muted); font-weight:500;">Escríbenos por WhatsApp para más info</small>
+                </div>
+                <ul>
+                    <li>✅ Todo lo del Básico</li>
+                    <li>✅ Productos ilimitados</li>
+                    <li>✅ Ventas fiadas</li>
+                    <li>✅ Reportes completos</li>
+                    <li>✅ Cierre de caja</li>
+                    <li>✅ Respaldos</li>
+                    <li>❌ Código de barras</li>
+                </ul>
+                <div class="plan-actions">
+                    <button class="plan-btn-primary" onclick="activarPlanDesdeModal('pro')">🔓 Activar este plan</button>
+                    <button class="plan-btn-wa" onclick="pedirPlanWhatsApp('pro')">💬 Pedir por WhatsApp</button>
+                </div>
+            </div>
+            <div class="plan-card" data-plan="promax">
+                <h3>👑 ProMax</h3>
+                <div class="plan-price">
+                    <span style="font-size:14px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">💰 Precios disponibles pronto</span>
+                    <small style="font-size:11px; color:var(--muted); font-weight:500;">Escríbenos por WhatsApp para más info</small>
+                </div>
+                <ul>
+                    <li>✅ Todo lo del Pro</li>
+                    <li>✅ Código de barras</li>
+                    <li>✅ Venta por peso (kg/lb/@)</li>
+                    <li>✅ Venta por unidad y por precio</li>
+                    <li>✅ Múltiples usuarios</li>
+                    <li>✅ Sugerencia de compra</li>
+                    <li>✅ Recordatorios WhatsApp</li>
+                    <li>✅ Impresión de recibos</li>
+                </ul>
+                <div class="plan-actions">
+                    <button class="plan-btn-primary" onclick="activarPlanDesdeModal('promax')">🔓 Activar este plan</button>
+                    <button class="plan-btn-wa" onclick="pedirPlanWhatsApp('promax')">💬 Pedir por WhatsApp</button>
+                </div>
+            </div>
+        </div>
+        <div class="plans-footer">
+            <img src="sakura-logo.png" alt="Sakura" class="plans-sakura-logo">
+            <p>💬 Para más información sobre precios, contáctanos:</p>
+            <div class="plans-contact-buttons">
+                <a href="https://wa.me/573332688336?text=Hola%2C%20quiero%20informaci%C3%B3n%20de%20J2" target="_blank" class="btn-wa">💬 WhatsApp</a>
+                <a href="mailto:soporte@sakura-it.com" class="btn-mail">✉️ Correo</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ONBOARDING -->
+<div id="onboardingModal" class="modal">
+    <div class="modal-content onboarding-content">
+        <div class="onboarding-step" id="onboardingStep">
+            <div class="onboarding-icon" id="onboardingIcon">👋</div>
+            <h2 id="onboardingTitle">¡Bienvenido a J2!</h2>
+            <p id="onboardingText">Vamos a hacer un recorrido rápido por la app.</p>
+        </div>
+        <div class="onboarding-progress">
+            <span class="progress-dot active"></span>
+            <span class="progress-dot"></span>
+            <span class="progress-dot"></span>
+            <span class="progress-dot"></span>
+            <span class="progress-dot"></span>
+        </div>
+        <div class="form-actions onboarding-actions">
+            <button type="button" class="secondary-btn" id="skipOnboarding">Saltar</button>
+            <button type="button" class="primary-btn" id="nextOnboarding">Siguiente →</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL INSTALAR PWA -->
+<div id="installModal" class="modal">
+    <div class="modal-content install-content">
+        <div class="install-icon">📲</div>
+        <h2>¡Instala J2 en tu dispositivo!</h2>
+        <p>Tener J2 como app te da estas ventajas:</p>
+        <div class="install-benefits">
+            <div class="install-benefit"><span>⚡</span><strong>Carga más rápido</strong></div>
+            <div class="install-benefit"><span>📴</span><strong>Funciona sin internet</strong></div>
+            <div class="install-benefit"><span>🏠</span><strong>Ícono en tu pantalla</strong></div>
+            <div class="install-benefit"><span>📱</span><strong>Pantalla completa</strong></div>
+        </div>
+        <div class="install-instructions">
+            <p><strong>En Android (Chrome):</strong></p>
+            <p>1. Toca el menú ⋮ arriba a la derecha</p>
+            <p>2. Selecciona "Instalar aplicación"</p>
+            <br>
+            <p><strong>En iPhone (Safari):</strong></p>
+            <p>1. Toca el ícono Compartir ⬆️</p>
+            <p>2. Selecciona "Añadir a pantalla de inicio"</p>
+        </div>
+        <button class="primary-btn" id="closeInstallModal" style="width:100%;">Entendido</button>
+    </div>
+</div>
+
+<!-- MODAL CONFIGURACIÓN -->
+<div id="settingsModal" class="modal">
+    <div class="modal-content settings-content">
+        <div class="modal-header"><h2>⚙️ Configuración</h2><button id="closeSettingsModal">✕</button></div>
+
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="general">🏪 Tienda</button>
+            <button class="settings-tab" data-tab="credit">💰 Fiados</button>
+            <button class="settings-tab" data-tab="messages">📱 Mensajes</button>
+            <button class="settings-tab" data-tab="themes">🎨 Temas</button>
+            <button class="settings-tab" data-tab="plan">💎 Mi plan</button>
+            <button class="settings-tab" data-tab="support">📞 Soporte</button>
+            <button class="settings-tab" data-tab="advanced">🔧 Avanzado</button>
+        </div>
+
+        <div class="settings-panel active" data-panel="general">
+            <div class="settings-section">
+                <h3>🏪 Personaliza tu tienda</h3>
+                <p class="settings-desc">Esta información aparece en el recibo de tus clientes.</p>
+                <label>Nombre de la tienda <input type="text" id="settingStoreName" placeholder="Ej: Tienda Doña Marta" maxlength="40"></label>
+                <label>Slogan o descripción (opcional) <input type="text" id="settingStoreSlogan" placeholder="Ej: Variedades y abarrotes" maxlength="60"></label>
+                <label>Teléfono de la tienda (opcional) <input type="tel" id="settingStorePhone" placeholder="Ej: 3001234567" inputmode="tel"></label>
+                <label>Dirección de la tienda (opcional) <input type="text" id="settingStoreAddress" placeholder="Ej: Calle 5 #3-42" maxlength="60"></label>
+                <label>Logo de la tienda (opcional) <input type="file" id="settingStoreLogo" accept="image/*"></label>
+                <div id="logoPreview" class="logo-preview" style="display:none;">
+                    <img id="logoPreviewImg" alt="Logo de la tienda">
+                    <button type="button" class="secondary-btn small-btn" id="removeLogoBtn">🗑️ Quitar logo</button>
+                </div>
+                <button class="primary-btn" id="saveStoreSettings" style="width:100%; margin-top:15px;">💾 Guardar cambios</button>
+            </div>
+        </div>
+
+        <div class="settings-panel" data-panel="credit">
+            <div class="settings-section">
+                <h3>💰 Configuración de Fiados</h3>
+                <p class="settings-desc">
+                    Define un tope de fiado global para todos los clientes. Los clientes que tengan
+                    su propio tope personalizado lo sobreescribirán.
+                </p>
+                <label>
+                    Tope de fiado global (0 = sin límite)
+                    <input type="number" id="settingGlobalCreditLimit" min="0" value="0" inputmode="numeric" placeholder="Ej: 100000">
+                </label>
+                <label>
+                    Días para considerar un fiado "antiguo"
+                    <input type="number" id="settingOldCreditDays" min="1" value="30" inputmode="numeric">
+                </label>
+                <p class="settings-desc" style="font-size:12px; margin-top:-8px;">
+                    Los fiados sin abonar por más días de este número se marcarán como antiguos.
+                </p>
+                <div class="form-actions" style="border-top:none; padding-top:10px;">
+                    <button type="button" class="primary-btn" id="saveCreditSettings" style="width:100%;">💾 Guardar configuración</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-panel" data-panel="messages">
+            <div class="settings-section">
+                <h3>📱 Mensajes de WhatsApp</h3>
+                <p class="settings-desc">
+                    Personaliza los mensajes que envías a tus clientes.
+                    Usa variables como <strong>{nombre}</strong>, <strong>{tienda}</strong>,
+                    <strong>{deuda}</strong>, <strong>{telefono}</strong>, <strong>{fecha}</strong> y
+                    se reemplazarán automáticamente con los datos reales.
+                </p>
+                <label>
+                    📩 Recordatorio de deuda
+                    <textarea id="msgReminder" rows="5" style="font-family:inherit; font-size:14px; resize:vertical; line-height:1.5;"></textarea>
+                </label>
+                <div class="msg-variables">
+                    Variables: <code>{nombre}</code> <code>{tienda}</code> <code>{deuda}</code> <code>{telefono}</code> <code>{fecha}</code>
+                </div>
+                <label style="margin-top:20px;">
+                    📄 Estado de cuenta (encabezado)
+                    <textarea id="msgStatement" rows="4" style="font-family:inherit; font-size:14px; resize:vertical; line-height:1.5;"></textarea>
+                </label>
+                <div class="msg-variables">
+                    Variables: <code>{nombre}</code> <code>{tienda}</code> <code>{deuda}</code> <code>{detalle}</code> <code>{fecha}</code>
+                </div>
+                <label style="margin-top:20px;">
+                    📅 Recordatorio de fiado antiguo
+                    <textarea id="msgOldCredit" rows="4" style="font-family:inherit; font-size:14px; resize:vertical; line-height:1.5;"></textarea>
+                </label>
+                <div class="form-actions" style="border-top:none;">
+                    <button type="button" class="secondary-btn" id="resetMessages">↺ Restaurar predeterminados</button>
+                    <button type="button" class="primary-btn" id="saveMessages">💾 Guardar mensajes</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-panel" data-panel="themes">
+            <div class="settings-section">
+                <h3>🎨 Apariencia</h3>
+                <p class="settings-desc">Elige cómo quieres ver la aplicación.</p>
+                <div class="theme-options">
+                    <label class="theme-option" data-theme="light">
+                        <input type="radio" name="themeSelect" value="light">
+                        <div class="theme-preview theme-preview-light"><div class="theme-preview-header"></div><div class="theme-preview-body"></div></div>
+                        <span>☀️ Claro</span>
+                    </label>
+                    <label class="theme-option" data-theme="dark">
+                        <input type="radio" name="themeSelect" value="dark">
+                        <div class="theme-preview theme-preview-dark"><div class="theme-preview-header"></div><div class="theme-preview-body"></div></div>
+                        <span>🌙 Oscuro</span>
+                    </label>
+                    <label class="theme-option" data-theme="auto">
+                        <input type="radio" name="themeSelect" value="auto">
+                        <div class="theme-preview theme-preview-auto"><div class="theme-preview-header"></div><div class="theme-preview-body"></div></div>
+                        <span>🔄 Auto</span>
+                    </label>
+                </div>
+
+                <h3 style="margin-top:25px;">🌈 Color principal</h3>
+                <p class="settings-desc">Elige el color de los botones y elementos principales.</p>
+                <div class="color-options">
+                    <label class="color-option" data-color="#1e40af"><input type="radio" name="colorSelect" value="#1e40af"><span style="background:#1e40af;"></span></label>
+                    <label class="color-option" data-color="#16a34a"><input type="radio" name="colorSelect" value="#16a34a"><span style="background:#16a34a;"></span></label>
+                    <label class="color-option" data-color="#dc2626"><input type="radio" name="colorSelect" value="#dc2626"><span style="background:#dc2626;"></span></label>
+                    <label class="color-option" data-color="#9333ea"><input type="radio" name="colorSelect" value="#9333ea"><span style="background:#9333ea;"></span></label>
+                    <label class="color-option" data-color="#ea580c"><input type="radio" name="colorSelect" value="#ea580c"><span style="background:#ea580c;"></span></label>
+                    <label class="color-option" data-color="#0d9488"><input type="radio" name="colorSelect" value="#0d9488"><span style="background:#0d9488;"></span></label>
+                    <label class="color-option" data-color="#db2777"><input type="radio" name="colorSelect" value="#db2777"><span style="background:#db2777;"></span></label>
+                    <label class="color-option" data-color="#111827"><input type="radio" name="colorSelect" value="#111827"><span style="background:#111827;"></span></label>
+                </div>
+                <button class="primary-btn" id="saveThemeSettings" style="width:100%; margin-top:20px;">💾 Guardar tema</button>
+            </div>
+        </div>
+
+        <div class="settings-panel" data-panel="plan">
+            <div class="settings-section">
+                <h3>💎 Tu plan actual</h3>
+                <div class="plan-info-card">
+                    <div class="plan-info-row"><span>Plan:</span><strong id="settingsPlanName">—</strong></div>
+                    <div class="plan-info-row"><span>Activado:</span><strong id="settingsPlanActivated">—</strong></div>
+                    <div class="plan-info-row"><span>Vence:</span><strong id="settingsPlanExpiry">—</strong></div>
+                    <div class="plan-info-row"><span>Días restantes:</span><strong id="settingsPlanDays">—</strong></div>
+                </div>
+                <button class="primary-btn" id="settingsRenewBtn" style="width:100%; margin-top:15px;">🔄 Renovar o cambiar plan</button>
+            </div>
+        </div>
+
+        <div class="settings-panel" data-panel="support">
+            <div class="settings-section">
+                <h3>📞 Estamos para ayudarte</h3>
+                <p class="settings-desc">¿Tienes dudas o problemas? Contáctanos:</p>
+                <div class="support-options">
+                    <a href="https://wa.me/573332688336?text=Hola%20Sakura%2C%20necesito%20soporte%20con%20J2" target="_blank" class="support-card support-card-wa">
+                        <span class="support-icon">💬</span>
+                        <div><strong>WhatsApp</strong><small>Respuesta en minutos</small></div>
+                    </a>
+                    <a href="mailto:soporte@sakura-it.com" class="support-card support-card-mail">
+                        <span class="support-icon">✉️</span>
+                        <div><strong>Correo</strong><small>soporte@sakura-it.com</small></div>
+                    </a>
+                    <div class="support-card support-card-info">
+                        <span class="support-icon">🏢</span>
+                        <div><strong>Sakura · Solución IT SAS</strong><small>Tecnología al servicio de tu negocio</small></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-panel" data-panel="advanced">
+            <div class="settings-section">
+                <h3>🔧 Estadísticas técnicas</h3>
+                <p class="settings-desc">Información de uso (solo para soporte técnico)</p>
+                <div class="tech-stats" id="techStats"></div>
+            </div>
+
+            <div class="settings-section" style="margin-top:25px;">
+                <h3>🔄 Actualizaciones</h3>
+                <p class="settings-desc">Verifica si hay una nueva versión disponible.</p>
+                <div class="version-info">
+                    <span>Versión actual:</span>
+                    <strong>v8.0</strong>
+                </div>
+                <button class="primary-btn" id="checkUpdatesBtn" onclick="forceCheckUpdates()" style="width:100%;">🔍 Buscar actualizaciones</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ACTUALIZACIÓN -->
+<div id="updateModal" class="modal">
+    <div class="modal-content update-modal-content">
+        <div class="modal-header"><h2>✨ Actualización</h2><button id="closeUpdateModalBtn">✕</button></div>
+        <div id="updateContent"></div>
+    </div>
+</div>
+
+<!-- MODAL ELIMINAR DEFINITIVO -->
+<div id="deleteForeverModal" class="modal">
+    <div class="modal-content" style="max-width:460px;">
+        <div class="modal-header">
+            <h2>🗑️ Eliminar definitivo</h2>
+            <button id="closeDeleteForeverModal">✕</button>
+        </div>
+        <div class="info-box" style="background:#fee2e2; color:#991b1b; border-left-color:#dc2626;">
+            ⚠️ <strong>Esta acción NO se puede deshacer.</strong><br>
+            El producto se eliminará permanentemente de la base de datos.
+        </div>
+        <p class="abono-info" id="deleteForeverInfo"></p>
+        <label>
+            🔐 Contraseña de administrador
+            <input type="password" id="deleteForeverPassword" placeholder="••••••••••••" autocomplete="off">
+        </label>
+        <div class="form-actions">
+            <button type="button" class="secondary-btn" id="cancelDeleteForever">Cancelar</button>
+            <button type="button" class="primary-btn" id="confirmDeleteForever" style="background:#dc2626;">🗑️ Eliminar definitivo</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SELECTOR DE MENSAJE WHATSAPP -->
+<div id="messageSelectorModal" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+            <h2>📱 Enviar mensaje a <span id="messageSelectorClient"></span></h2>
+            <button id="closeMessageSelectorModal">✕</button>
+        </div>
+        <p style="color:var(--muted); font-size:13px; margin-bottom:18px;">
+            Elige el tipo de mensaje que quieres enviar por WhatsApp:
+        </p>
+
+        <div id="messageSelectorOptions" class="message-selector-options"></div>
+
+        <div class="form-actions" style="border-top:1px solid var(--border); padding-top:15px; margin-top:15px;">
+            <button type="button" class="secondary-btn" id="cancelMessageSelector">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL EXPORTAR REPORTE -->
+<div id="exportModal" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+            <h2>📄 Exportar reporte</h2>
+            <button id="closeExportModal">✕</button>
+        </div>
+
+        <p style="color:var(--muted); font-size:13px; margin-bottom:18px;">
+            Elige el período que quieres exportar. El archivo se abrirá en Excel con formato profesional.
+        </p>
+
+        <label style="display:block; margin-bottom:14px; font-weight:700; font-size:13px;">
+            Período
+            <select id="exportPeriod" style="margin-top:6px;">
+                <option value="today">📅 Hoy</option>
+                <option value="week">📅 Últimos 7 días</option>
+                <option value="month">📅 Este mes</option>
+                <option value="month30">📅 Últimos 30 días</option>
+                <option value="year">📅 Este año</option>
+                <option value="all" selected>📅 Todo el histórico</option>
+                <option value="custom">📅 Rango personalizado</option>
+            </select>
+        </label>
+
+        <div id="customRangeBox" style="display:none; margin-bottom:14px;">
+            <div class="row-two">
+                <label>Desde <input type="date" id="exportStartDate"></label>
+                <label>Hasta <input type="date" id="exportEndDate"></label>
+            </div>
+        </div>
+
+        <label style="display:block; margin-bottom:14px; font-weight:700; font-size:13px;">
+            Formato
+            <select id="exportFormat" style="margin-top:6px;">
+                <option value="xls" selected>📊 Excel con formato (.xls)</option>
+                <option value="csv">📄 CSV básico (sin formato)</option>
+            </select>
+        </label>
+
+        <div class="info-box" style="font-size:12px;">
+            💡 <strong>Tip:</strong> El archivo .xls se abre en Excel con tabla de colores, totales y gráficos. El CSV es más simple pero más compatible.
+        </div>
+
+        <div class="form-actions">
+            <button type="button" class="secondary-btn" id="cancelExport">Cancelar</button>
+            <button type="button" class="primary-btn" id="confirmExport">📥 Exportar</button>
+        </div>
+    </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="app-footer">
+    <div class="footer-content">
+        <div class="footer-brand">
+            <img src="sakura-logo.png" alt="Sakura - Solución IT" class="sakura-logo">
+            <div class="footer-brand-text">
+                <p class="footer-powered">Powered by <strong>Sakura · Solución IT SAS</strong></p>
+                <p class="footer-tagline">Tecnología al servicio de tu negocio</p>
+            </div>
+        </div>
+        <div class="footer-contact">
+            <p class="footer-contact-title">📞 Soporte técnico</p>
+            <div class="footer-contact-links">
+                <a href="https://wa.me/573332688336" target="_blank" class="footer-link footer-link-wa"><span>💬</span> WhatsApp</a>
+                <a href="mailto:soporte@sakura-it.com" class="footer-link footer-link-mail"><span>✉️</span> soporte@sakura-it.com</a>
+            </div>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>© <span id="footerYear"></span> Sakura · Solución IT SAS — Todos los derechos reservados.</p>
+        <p class="footer-version">J2 v8.0 · Hecho con 💙 en Colombia</p>
+    </div>
+</footer>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
