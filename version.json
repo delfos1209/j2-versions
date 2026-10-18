@@ -4,6 +4,6 @@
   "notes": "Optimización de rendimiento, filtro de estado en inventario, productos archivados con eliminación segura por contraseña de admin, pantallas de carga y mejoras de fluidez.",
   "downloads": {
     "desktop": "https://github.com/delfos1209/j2-versions/releases/download/v8.0.0/J2-Setup-8.0.0.exe",
-    "android": ""
+    "android": "https://github.com/delfos1209/j2-versions/releases/download/v8.0.0-android/app-release-signed.apk"
   }
 }
